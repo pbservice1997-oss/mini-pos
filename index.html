@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mini POS</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    body { font-family: sans-serif; padding: 20px; text-align: center; }
+    button { padding: 15px 20px; margin: 10px; font-size: 18px; cursor: pointer; border-radius: 8px; border: none; background-color: #007bff; color: white; }
+    .sync-btn { background-color: #28a745; }
+  </style>
+</head>
+<body>
+
+  <h1>☕ Mini Cafe POS</h1>
+  <p id="status">สถานะ: เช็คอินเทอร์เน็ต...</p>
+
+  <button onclick="order('Latte', 60)">อเมริกาโน่ (60฿)</button>
+  <button onclick="order('Tea', 50)">ชาไทย (50฿)</button>
+  <br><br>
+  <button class="sync-btn" onclick="syncOfflineOrders()">🔄 ซิงค์ออเดอร์ตกค้าง</button>
+
+  <script>
+    // ⚠️ เอา URL ของ GAS ที่ก๊อปไว้มาใส่ตรงนี้
+    const GAS_URL = "ใส่_URL_GAS_ตรงนี้"; 
+
+    // ติดตั้ง Service Worker (ทำให้ใช้ตอนไม่มีเน็ตได้)
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+
+    // ฟังก์ชันอัปเดตสถานะเน็ต
+    function updateStatus() {
+      document.getElementById('status').innerText = navigator.onLine ? "🟢 สถานะ: ออนไลน์" : "🔴 สถานะ: ออฟไลน์ (ข้อมูลจะเก็บในเครื่อง)";
+    }
+    window.addEventListener('online', updateStatus);
+    window.addEventListener('offline', updateStatus);
+    updateStatus();
+
+    // ฟังก์ชันกดสั่ง
+    function order(itemName, itemPrice) {
+      const orderData = { item: itemName, price: itemPrice };
+
+      if (navigator.onLine) {
+        // มีเน็ต -> ส่งไป GAS ทันที
+        sendToGAS(orderData);
+      } else {
+        // เน็ตหลุด -> เซฟลงเครื่อง (LocalStorage)
+        let offlineData = JSON.parse(localStorage.getItem('offlineOrders')) || [];
+        offlineData.push(orderData);
+        localStorage.setItem('offlineOrders', JSON.stringify(offlineData));
+        alert('เน็ตหลุด! บันทึกออเดอร์ลงเครื่องแล้ว');
+      }
+    }
+
+    // ฟังก์ชันยิงข้อมูลไป GAS
+    function sendToGAS(data) {
+      fetch(GAS_URL, {
+        method: 'POST',
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(data)
+      }).then(() => alert(`ส่ง ${data.item} เข้า Sheet แล้ว!`))
+        .catch(() => alert('ส่งไม่สำเร็จ ตรวจสอบอินเทอร์เน็ต'));
+    }
+
+    // ฟังก์ชันดันข้อมูลตกค้างขึ้น Sheet
+    function syncOfflineOrders() {
+      let offlineData = JSON.parse(localStorage.getItem('offlineOrders')) || [];
+      if (offlineData.length === 0) {
+        alert("ไม่มีออเดอร์ตกค้าง");
+        return;
+      }
+      
+      if (!navigator.onLine) {
+        alert("ยังไม่มีเน็ต ซิงค์ไม่ได้ครับ");
+        return;
+      }
+
+      // ส่งทีละออเดอร์ที่ค้างอยู่
+      offlineData.forEach(data => sendToGAS(data));
+      // ส่งเสร็จก็ล้างความจำในเครื่องทิ้ง
+      localStorage.removeItem('offlineOrders');
+      alert("ซิงค์ข้อมูลเรียบร้อย!");
+    }
+  </script>
+</body>
+</html>
